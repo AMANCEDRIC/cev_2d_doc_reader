@@ -29,8 +29,8 @@ class ResultScreen extends StatelessWidget {
         end: Alignment.bottomRight,
       );
       statusIcon = Icons.verified_user_rounded;
-      statusTitle = 'DOCUMENT AUTHENTIQUE';
-      statusSubtitle = 'La signature cryptographique est valide.';
+      statusTitle = result.message ?? 'DOCUMENT AUTHENTIQUE';
+      statusSubtitle = 'La signature cryptographique a été vérifiée par le serveur.';
     } else if (isValid) {
       statusGradient = const LinearGradient(
         colors: [Color(0xFFD97706), Color(0xFFFBBF24)],
@@ -38,8 +38,8 @@ class ResultScreen extends StatelessWidget {
         end: Alignment.bottomRight,
       );
       statusIcon = Icons.gpp_maybe_rounded;
-      statusTitle = 'SIGNATURE INCORRECTE';
-      statusSubtitle = 'Les données ont pu être modifiées.';
+      statusTitle = result.message ?? 'SIGNATURE INCORRECTE';
+      statusSubtitle = 'Le document peut avoir été falsifié.';
     } else {
       statusGradient = const LinearGradient(
         colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
@@ -47,8 +47,8 @@ class ResultScreen extends StatelessWidget {
         end: Alignment.bottomRight,
       );
       statusIcon = Icons.gpp_bad_rounded;
-      statusTitle = 'ÉCHEC DE VÉRIFICATION';
-      statusSubtitle = 'Le document n\'a pas pu être validé.';
+      statusTitle = result.message ?? 'ÉCHEC DE VÉRIFICATION';
+      statusSubtitle = 'Le serveur n\'a pas pu valider ce document.';
     }
 
     return Scaffold(
@@ -77,10 +77,11 @@ class ResultScreen extends StatelessWidget {
                   .animate().fadeIn(delay: 200.ms),
               const SizedBox(height: 12),
               DataCard(children: [
+                if (result.reference != null) InfoRow(label: 'Référence', value: result.reference!),
+                if (result.typeDocument != null) InfoRow(label: 'Type Doc', value: result.typeDocument!),
+                if (result.statut != null) InfoRow(label: 'Statut', value: result.statut!),
                 InfoRow(label: 'Émetteur', value: result.parsedDoc!.header.paysEmetteur),
-                InfoRow(label: 'Autorité', value: result.parsedDoc!.header.authorityId),
                 InfoRow(label: 'Date Émission', value: result.parsedDoc!.header.dateEmission),
-                InfoRow(label: 'Type', value: result.parsedDoc!.header.typeDoc),
               ]).animate().fadeIn(delay: 300.ms).slideX(begin: 0.1),
               
               const SizedBox(height: 24),

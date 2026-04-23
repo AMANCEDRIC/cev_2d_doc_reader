@@ -51,6 +51,12 @@ class VerificationResult {
   final ParsedDoc? parsedDoc;
   final String? error;
   final DateTime checkedAt;
+  
+  // Nouveaux champs backend
+  final String? message;
+  final String? reference;
+  final String? typeDocument;
+  final String? statut;
 
   VerificationResult({
     required this.isValid,
@@ -58,5 +64,9 @@ class VerificationResult {
     this.parsedDoc,
     this.error,
     required this.checkedAt,
+    this.message,
+    this.reference,
+    this.typeDocument,
+    this.statut,
   });
 }

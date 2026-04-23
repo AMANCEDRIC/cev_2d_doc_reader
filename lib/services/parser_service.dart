@@ -5,56 +5,76 @@ class ParserService {
   static const String _us = '\x1F'; // Unit Separator
 
   ParsedDoc parse(String raw) {
-    // Remplacement des tags textuels si nécessaire
+    // Remplacement des tags textuels si nécessaire (compatibilité)
     String cleanRaw = raw
         .replaceAll('<GS>', _gs)
         .replaceAll('<US>', _us);
 
+    // ---------------------------------------------------------
+    // Structure réelle du 2D-Doc :
+    //   [HEADER 22 chars][01val\x1D][02val\x1D]...\x1FXY[SIGNATURE]
+    //   - Header : exactement 22 caractères, longueur fixe
+    //   - Champs : séparés par GS (\x1D)
+    //   - Séparateur payload/signature : US (\x1F) unique dans le doc
+    // ---------------------------------------------------------
+
+    if (!cleanRaw.startsWith('DC')) {
+      throw Exception('Format 2D-Doc non reconnu (doit commencer par DC)');
+    }
+
     if (!cleanRaw.contains(_us)) {
-      throw Exception('Format 2D-Doc non reconnu (pas de séparateur US)');
+      throw Exception('Format 2D-Doc non reconnu (séparateur US absent)');
     }
 
-    final parts = cleanRaw.split(_us);
-    final dataSection = parts[0];
-    final signatureB64 = parts.length > 1 ? parts[1] : '';
+    // 1. Séparer les données de la signature sur le US unique
+    final usSplit = cleanRaw.indexOf(_us);
+    final dataSection    = cleanRaw.substring(0, usSplit);
+    final signaturePart  = cleanRaw.substring(usSplit + 1); // contient "XY<signature>"
 
-    final firstGS = dataSection.indexOf(_gs);
-
-    if (firstGS == -1 || !dataSection.startsWith('DC')) {
-      throw Exception("Format 2D-Doc non reconnu (pas d'en-tête valide)");
+    // 2. Extraire le header (24 premiers caractères fixes)
+    // DC(2)+version(2)+authority(4)+certId(4)+dateEmission(4)+dateSignature(4)+typeDoc(2)+perimeter(2)=24
+    if (dataSection.length < 24) {
+      throw Exception('Header 2D-Doc trop court (${dataSection.length} < 24 chars)');
     }
-
-    final headerStr = dataSection.substring(0, firstGS);
+    final headerStr = dataSection.substring(0, 24);
     final header = _parseHeader(headerStr);
 
-    final fieldsRaw = dataSection.substring(firstGS + 1).split(_gs);
+    // 3. Extraire les champs de données (tout ce qui suit le header de 24 chars)
+    final fieldsSection = dataSection.substring(24);
+    final fieldsRaw = fieldsSection.split(_gs);
     final fields = fieldsRaw
-        .where((f) => f.length >= 2)
+        .where((f) => f.length >= 3) // tag (2 chars) + au moins 1 char de valeur
         .map((f) => DocField(
-      code: f.substring(0, 2),
-      label: _getLabelForCode(f.substring(0, 2)),
-      value: f.substring(2),
-    ))
+              code: f.substring(0, 2),
+              label: _getLabelForCode(f.substring(0, 2)),
+              value: f.substring(2),
+            ))
         .toList();
+
+    // 4. La signature commence après "XY" (préfixe du bloc signature)
+    final signature = signaturePart.startsWith('XY')
+        ? signaturePart.substring(2)
+        : signaturePart;
 
     return ParsedDoc(
       raw: cleanRaw,
       header: header,
       fields: fields,
-      signature: signatureB64,
+      signature: signature,
     );
   }
 
   DocHeader _parseHeader(String header) {
-    final rawDate = header.length >= 19 ? header.substring(15, 19) : '';
+    // Header 24 chars : DC(2)+version(2)+authority(4)+certId(4)+dateEmission(4)+dateSignature(4)+typeDoc(2)+perimeter(2)
+    final rawDate = header.length >= 16 ? header.substring(12, 16) : '';
     return DocHeader(
       version: header.length >= 4 ? header.substring(2, 4) : '',
       paysEmetteur: header.length >= 6 ? header.substring(4, 6) : '',
-      authorityId: header.length >= 10 ? header.substring(6, 10) : '',
-      certId: header.length >= 15 ? header.substring(10, 15) : '',
+      authorityId: header.length >= 8 ? header.substring(4, 8) : '',
+      certId: header.length >= 12 ? header.substring(8, 12) : '',
       dateEmission: _decode2DDocDate(rawDate),
-      paysDoc: header.length >= 21 ? header.substring(19, 21) : 'N/A',
-      typeDoc: header.length >= 23 ? header.substring(21, 23) : 'N/A',
+      paysDoc: header.length >= 24 ? header.substring(22, 24) : 'N/A',
+      typeDoc: header.length >= 22 ? header.substring(20, 22) : 'N/A',
     );
   }
 

@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/doc2d_model.dart';
 import '../services/parser_service.dart';
-import '../services/crypto_service.dart';
+import '../services/api_service.dart';
 
 class ScannerController extends ChangeNotifier {
   final ParserService _parser = ParserService();
-  final CryptoService _crypto = CryptoService();
+  final ApiService _api = ApiService();
   
   late final MobileScannerController cameraController;
   
@@ -55,14 +55,20 @@ class ScannerController extends ChangeNotifier {
       }
 
       final parsed = _parser.parse(raw);
-      final isAuthentic = await _crypto.verify(parsed);
+      
+      // Appel à l'API Backend pour la vérification avec la charge utile nettoyée
+      final apiResponse = await _api.verifyDocument(parsed.raw);
 
       final result = VerificationResult(
         isValid: true,
-        isAuthentic: isAuthentic,
+        isAuthentic: apiResponse.valide,
         parsedDoc: parsed,
         error: null,
         checkedAt: DateTime.now(),
+        message: apiResponse.message,
+        reference: apiResponse.reference,
+        typeDocument: apiResponse.typeDocument,
+        statut: apiResponse.statut,
       );
 
       _isProcessing = false;
