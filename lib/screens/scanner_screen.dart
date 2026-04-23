@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -20,6 +22,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
   late final ScannerController _controller;
   final TextEditingController _manualController = TextEditingController();
   bool _hasHandledDetection = false;
+  List<Offset> _focusCorners = const [];
+  Size _focusInputSize = Size.zero;
+  bool _showFocusLock = false;
   
   static const String _sample =
       'DC04CI0300012571257115CICI01CJ-2026-CI-00456\x1D02TRAORE\x1D03MAMADOU\x1D0410/03/1988\x1D05BOUAKE\x1D06IVOIRIEN\x1D07NEANT\x1D0830/03/2026\x1D09MME CISSE FATOUMATA\x1FXYCT72O32ADATIVXN3AIWL7T7D2QZKA66O4E3YTXMNBZG4XVIPMT67X4AR34RCZRNQHSXKRYNKJ2LUVHEBQ3D34NTALOAL55XL5YV2Q=';
@@ -38,9 +43,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   void _handleProcessing(String raw) async {
-    if (_hasHandledDetection) return;
-    _hasHandledDetection = true;
-
     final result = await _controller.processRaw(raw);
     if (mounted) {
       Navigator.push(
@@ -48,26 +50,45 @@ class _ScannerScreenState extends State<ScannerScreen> {
         MaterialPageRoute(builder: (_) => ResultScreen(result: result)),
       );
     }
+    _hideFocusLock();
     _hasHandledDetection = false;
   }
 
-  String? _pickBestRawValue(BarcodeCapture capture) {
+  Barcode? _pickBestBarcode(BarcodeCapture capture) {
     // Priorité DataMatrix, puis fallback sur n'importe quel code non vide.
     for (final barcode in capture.barcodes) {
       final value = (barcode.rawValue ?? barcode.displayValue)?.trim();
       if (barcode.format == BarcodeFormat.dataMatrix &&
           value != null &&
           value.isNotEmpty) {
-        return value;
+        return barcode;
       }
     }
     for (final barcode in capture.barcodes) {
       final value = (barcode.rawValue ?? barcode.displayValue)?.trim();
       if (value != null && value.isNotEmpty) {
-        return value;
+        return barcode;
       }
     }
     return null;
+  }
+
+  void _showFocusLockForBarcode(Barcode barcode, Size inputSize) {
+    if (!mounted || barcode.corners.isEmpty) return;
+    setState(() {
+      _focusCorners = barcode.corners;
+      _focusInputSize = inputSize;
+      _showFocusLock = true;
+    });
+  }
+
+  void _hideFocusLock() {
+    if (!mounted) return;
+    setState(() {
+      _showFocusLock = false;
+      _focusCorners = const [];
+      _focusInputSize = Size.zero;
+    });
   }
 
   @override
@@ -172,14 +193,33 @@ class _ScannerScreenState extends State<ScannerScreen> {
                   controller: _controller.cameraController,
                   onDetect: (capture) {
                     if (_hasHandledDetection) return;
-                    final raw = _pickBestRawValue(capture);
+                    final barcode = _pickBestBarcode(capture);
+                    final raw = (barcode?.rawValue ?? barcode?.displayValue)?.trim();
 
-                    if (raw != null) {
-                      _handleProcessing(raw);
+                    if (barcode != null && raw != null && raw.isNotEmpty) {
+                      _hasHandledDetection = true;
+                      _showFocusLockForBarcode(barcode, capture.size);
+                      Future.delayed(const Duration(milliseconds: 180), () {
+                        if (!mounted) return;
+                        _handleProcessing(raw);
+                      });
                     }
                   },
                 ),
                 const ScannerViewfinder(),
+                IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _showFocusLock ? 1 : 0,
+                    duration: const Duration(milliseconds: 120),
+                    child: CustomPaint(
+                      painter: _FocusLockPainter(
+                        corners: _focusCorners,
+                        inputSize: _focusInputSize,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
                 Positioned(
                   left: 12,
                   right: 12,
@@ -362,5 +402,64 @@ class _ScannerScreenState extends State<ScannerScreen> {
         ],
       ),
     );
+  }
+}
+
+class _FocusLockPainter extends CustomPainter {
+  final List<Offset> corners;
+  final Size inputSize;
+
+  const _FocusLockPainter({
+    required this.corners,
+    required this.inputSize,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (corners.length < 4) return;
+
+    final points = _transformCorners(size);
+    if (points.length < 4) return;
+
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i < points.length; i++) {
+      path.lineTo(points[i].dx, points[i].dy);
+    }
+    path.close();
+
+    final glowPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
+      ..color = AppTheme.primary.withValues(alpha: 0.22)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..color = AppTheme.primary.withValues(alpha: 0.9);
+
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, linePaint);
+  }
+
+  List<Offset> _transformCorners(Size canvasSize) {
+    if (inputSize == Size.zero || inputSize.width <= 0 || inputSize.height <= 0) {
+      return corners;
+    }
+
+    final scaleX = canvasSize.width / inputSize.width;
+    final scaleY = canvasSize.height / inputSize.height;
+    final scale = math.min(scaleX, scaleY);
+    final dx = (canvasSize.width - inputSize.width * scale) / 2;
+    final dy = (canvasSize.height - inputSize.height * scale) / 2;
+
+    return corners
+        .map((p) => Offset(dx + p.dx * scale, dy + p.dy * scale))
+        .toList(growable: false);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FocusLockPainter oldDelegate) {
+    return oldDelegate.corners != corners || oldDelegate.inputSize != inputSize;
   }
 }

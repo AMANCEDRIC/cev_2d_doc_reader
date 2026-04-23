@@ -15,7 +15,7 @@ class SplashWelcomeScreen extends StatefulWidget {
 
 class _SplashWelcomeScreenState extends State<SplashWelcomeScreen> {
   static const String _slogan = 'Le gage de la confiance numérique';
-  static const double _logoLeftCompensation = 35;
+  static const double _logoLeftCompensation = 50;
   Timer? _sloganTimer;
   Timer? _navigationTimer;
   bool _showSlogan = false;
