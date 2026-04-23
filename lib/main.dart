@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'utils/app_theme.dart';
-import 'screens/scanner_screen.dart';
+import 'screens/splash_welcome_screen.dart';
 import 'controllers/theme_controller.dart';
 
 // Instance globale simple pour le thème
@@ -37,7 +37,7 @@ class CevApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: themeController.themeMode,
-          home: const ScannerScreen(),
+          home: const SplashWelcomeScreen(),
         );
       },
     );

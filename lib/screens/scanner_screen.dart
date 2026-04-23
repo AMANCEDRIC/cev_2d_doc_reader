@@ -19,6 +19,7 @@ class ScannerScreen extends StatefulWidget {
 class _ScannerScreenState extends State<ScannerScreen> {
   late final ScannerController _controller;
   final TextEditingController _manualController = TextEditingController();
+  bool _hasHandledDetection = false;
   
   static const String _sample =
       'DC04CI0300012571257115CICI01CJ-2026-CI-00456\x1D02TRAORE\x1D03MAMADOU\x1D0410/03/1988\x1D05BOUAKE\x1D06IVOIRIEN\x1D07NEANT\x1D0830/03/2026\x1D09MME CISSE FATOUMATA\x1FXYCT72O32ADATIVXN3AIWL7T7D2QZKA66O4E3YTXMNBZG4XVIPMT67X4AR34RCZRNQHSXKRYNKJ2LUVHEBQ3D34NTALOAL55XL5YV2Q=';
@@ -37,6 +38,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   void _handleProcessing(String raw) async {
+    if (_hasHandledDetection) return;
+    _hasHandledDetection = true;
+
     final result = await _controller.processRaw(raw);
     if (mounted) {
       Navigator.push(
@@ -44,6 +48,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
         MaterialPageRoute(builder: (_) => ResultScreen(result: result)),
       );
     }
+    _hasHandledDetection = false;
+  }
+
+  String? _pickBestRawValue(BarcodeCapture capture) {
+    // Priorité DataMatrix, puis fallback sur n'importe quel code non vide.
+    for (final barcode in capture.barcodes) {
+      final value = (barcode.rawValue ?? barcode.displayValue)?.trim();
+      if (barcode.format == BarcodeFormat.dataMatrix &&
+          value != null &&
+          value.isNotEmpty) {
+        return value;
+      }
+    }
+    for (final barcode in capture.barcodes) {
+      final value = (barcode.rawValue ?? barcode.displayValue)?.trim();
+      if (value != null && value.isNotEmpty) {
+        return value;
+      }
+    }
+    return null;
   }
 
   @override
@@ -147,13 +171,34 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 MobileScanner(
                   controller: _controller.cameraController,
                   onDetect: (capture) {
-                    final barcode = capture.barcodes.firstOrNull;
-                    if (barcode?.rawValue != null) {
-                      _handleProcessing(barcode!.rawValue!);
+                    if (_hasHandledDetection) return;
+                    final raw = _pickBestRawValue(capture);
+
+                    if (raw != null) {
+                      _handleProcessing(raw);
                     }
                   },
                 ),
                 const ScannerViewfinder(),
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      child: Text(
+                        'Mode ecran: 15-25 cm, luminosite max, code bien net et sans reflets.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ),
                 if (_controller.isProcessing)
                   GlassContainer(
                     borderRadius: 28,

@@ -22,6 +22,10 @@ class ScannerController extends ChangeNotifier {
   ScannerController() {
     cameraController = MobileScannerController(
       formats: [BarcodeFormat.dataMatrix, BarcodeFormat.qrCode],
+      // Le scan sur écran est plus stable avec un débit normal + résolution plus élevée.
+      cameraResolution: const Size(1280, 720),
+      detectionSpeed: DetectionSpeed.normal,
+      detectionTimeoutMs: 700,
       autoStart: false,
     );
   }
